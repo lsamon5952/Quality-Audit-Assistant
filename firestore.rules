@@ -36,7 +36,8 @@ service cloud.firestore {
 
     // Risk reports: superadmin only
     match /riskReports/{reportId} {
-      allow read, write: if isAdmin() && isValidId(reportId);
+      allow get, write: if isAdmin() && isValidId(reportId);
+      allow list: if isAdmin();
     }
 
     // User profile and subcollections: owner read/write; admin read-only
@@ -45,12 +46,14 @@ service cloud.firestore {
       allow write: if isOwner(userId) && isValidId(userId);
 
       match /reviews/{reviewId} {
-        allow read: if (isOwner(userId) || isAdmin()) && isValidId(reviewId);
+        allow get: if (isOwner(userId) || isAdmin()) && isValidId(reviewId);
+        allow list: if isOwner(userId) || isAdmin();
         allow write: if isOwner(userId) && isValidId(reviewId);
       }
 
       match /interactions/{interactionId} {
-        allow read: if (isOwner(userId) || isAdmin()) && isValidId(interactionId);
+        allow get: if (isOwner(userId) || isAdmin()) && isValidId(interactionId);
+        allow list: if isOwner(userId) || isAdmin();
         allow write: if isOwner(userId) && isValidId(interactionId);
       }
     }
