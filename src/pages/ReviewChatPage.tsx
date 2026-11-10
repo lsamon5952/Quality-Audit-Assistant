@@ -5,6 +5,7 @@ import { Modal } from '../components/Modal';
 import { ProcessRiskSheetView } from './ProcessRiskSheetView';
 import {
   doc,
+  getDoc,
   setDoc,
   collection,
   query,
@@ -47,6 +48,8 @@ export const ReviewChatPage: React.FC<ReviewChatPageProps> = ({ reviewId, onBack
 
   const [review, setReview] = useState<Review | null>(null);
   const [interactions, setInteractions] = useState<Interaction[]>([]);
+  const [reviewLoaded, setReviewLoaded] = useState(false);
+  const [interactionsLoaded, setInteractionsLoaded] = useState(false);
   const [inputText, setInputText] = useState('');
   const [currentStep, setCurrentStep] = useState(1);
   const [isWaitingReply, setIsWaitingReply] = useState(false);
@@ -70,6 +73,9 @@ export const ReviewChatPage: React.FC<ReviewChatPageProps> = ({ reviewId, onBack
   useEffect(() => {
     if (!user || !reviewId) return;
 
+    setReviewLoaded(false);
+    setInteractionsLoaded(false);
+
     let unsubscribeReview: (() => void) | null = null;
     let unsubscribeInteractions: (() => void) | null = null;
 
@@ -84,9 +90,15 @@ export const ReviewChatPage: React.FC<ReviewChatPageProps> = ({ reviewId, onBack
             if (data.step && data.step > currentStep) {
               setCurrentStep(data.step);
             }
+          } else {
+            setReview(null);
           }
+          setReviewLoaded(true);
         },
-        (err) => handleFirestoreError(err, OperationType.GET, `users/${user.uid}/reviews/${reviewId}`)
+        (err) => {
+          setReviewLoaded(true);
+          handleFirestoreError(err, OperationType.GET, `users/${user.uid}/reviews/${reviewId}`);
+        }
       );
 
       const interactionsRef = collection(db, 'users', user.uid, 'interactions');
@@ -110,11 +122,17 @@ export const ReviewChatPage: React.FC<ReviewChatPageProps> = ({ reviewId, onBack
             if (item.step && item.step > maxStep) maxStep = item.step;
           }
           setCurrentStep((prev) => Math.max(prev, maxStep));
+          setInteractionsLoaded(true);
         },
-        (err) => handleFirestoreError(err, OperationType.GET, `users/${user.uid}/interactions`)
+        (err) => {
+          setInteractionsLoaded(true);
+          handleFirestoreError(err, OperationType.GET, `users/${user.uid}/interactions`);
+        }
       );
     } catch (e) {
       console.error('Error attaching review listeners:', e);
+      setReviewLoaded(true);
+      setInteractionsLoaded(true);
     }
 
     return () => {
@@ -123,14 +141,29 @@ export const ReviewChatPage: React.FC<ReviewChatPageProps> = ({ reviewId, onBack
     };
   }, [user, reviewId]);
 
-  // 2. Initialize first fixed message if new review has no interactions
+  // 2. Initialize first fixed message ONLY for brand-new reviews after both listeners have delivered their first snapshot
   useEffect(() => {
-    if (!user || !profile || interactions.length > 0 || review?.status === 'completed') return;
+    // Wait until both listeners have delivered their first snapshot
+    if (!user || !profile || !reviewLoaded || !interactionsLoaded) return;
+
+    // If review already exists or interactions exist, never seed or overwrite review state
+    if (review !== null || interactions.length > 0) return;
 
     const seedInitialGreeting = async () => {
       try {
+        const reviewDocRef = doc(db, 'users', user.uid, 'reviews', reviewId);
+        // Explicit getDoc check before writing to prevent race conditions from resetting existing review
+        const existingReviewSnap = await getDoc(reviewDocRef);
+        if (existingReviewSnap.exists()) {
+          return;
+        }
+
         const firstMessageId = 'welcome-' + reviewId;
         const interactionDocRef = doc(db, 'users', user.uid, 'interactions', firstMessageId);
+        const existingMsgSnap = await getDoc(interactionDocRef);
+        if (existingMsgSnap.exists()) {
+          return;
+        }
 
         const initialContent = `Hello ${firstName}! Welcome to the UM Tagum College Process Review for our Total Quality Management audit. We will go through five quick steps: 1 Customers & Outputs, 2 Process Steps, 3 Suppliers & Inputs, 4 What Can Go Wrong, and 5 Improvements.
 
@@ -147,34 +180,29 @@ To begin, who depends on the work you do, and what do they expect from you?`;
           timestamp: serverTimestamp(),
         });
 
-        // Ensure review document exists
-        const reviewDocRef = doc(db, 'users', user.uid, 'reviews', reviewId);
-        await setDoc(
-          reviewDocRef,
-          {
-            reviewId,
-            userId: user.uid,
-            status: 'in_progress',
-            step: 1,
-            profileSnapshot: {
-              department: profile.department,
-              roleCategory: profile.roleCategory,
-              position: profile.position,
-              jobFunction: profile.jobFunction,
-              yearsInRole: profile.yearsInRole,
-              displayName: profile.displayName || user.displayName || 'Employee',
-            },
-            createdAt: serverTimestamp(),
+        // Create the brand-new review document
+        await setDoc(reviewDocRef, {
+          reviewId,
+          userId: user.uid,
+          status: 'in_progress',
+          step: 1,
+          profileSnapshot: {
+            department: profile.department,
+            roleCategory: profile.roleCategory,
+            position: profile.position,
+            jobFunction: profile.jobFunction,
+            yearsInRole: profile.yearsInRole,
+            displayName: profile.displayName || user.displayName || 'Employee',
           },
-          { merge: true }
-        );
+          createdAt: serverTimestamp(),
+        });
       } catch (err) {
         console.warn('Initial greeting seeding notice:', err);
       }
     };
 
     seedInitialGreeting();
-  }, [user, profile, interactions.length, reviewId, review?.status, firstName]);
+  }, [user, profile, reviewLoaded, interactionsLoaded, review, interactions.length, reviewId, firstName]);
 
   useEffect(() => {
     scrollToBottom();
