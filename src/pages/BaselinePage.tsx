@@ -21,10 +21,15 @@ import {
 const MAX_TOTAL_CHARS = 800000;
 const MAX_FILE_BYTES = 200 * 1024; // 200 KB per file
 
+export function cleanDocumentTitle(rawTitle: string): string {
+  if (!rawTitle) return '';
+  return rawTitle.replace(/^#+\s*/, '').trim();
+}
+
 const SAMPLE_BASELINE_DOCS: BaselineDoc[] = [
   {
     id: 'tl-standards-2026',
-    title: '# Teaching & Learning Quality Standards (TL Codes)',
+    title: 'Teaching & Learning Quality Standards (TL Codes)',
     text: `# Teaching & Learning Quality Standards (TL Codes)
 ## 1. Syllabus & Curriculum
 - **TL-1.1**: Course syllabi must be aligned with Outcomes-Based Education (OBE) frameworks and uploaded to the LMS prior to the first day of classes.
@@ -46,7 +51,7 @@ const SAMPLE_BASELINE_DOCS: BaselineDoc[] = [
   },
   {
     id: 'al-standards-2026',
-    title: '# Academic Leadership & Governance Standards (AL Codes)',
+    title: 'Academic Leadership & Governance Standards (AL Codes)',
     text: `# Academic Leadership & Governance Standards (AL Codes)
 ## 1. Curriculum & Program Review
 - **AL-1.1**: Annual stakeholder consultative meeting with alumni and industry advisory councils.
@@ -68,7 +73,7 @@ const SAMPLE_BASELINE_DOCS: BaselineDoc[] = [
   },
   {
     id: 'os-cw-standards-2026',
-    title: '# Office Staff & College-Wide Operational Standards (OS & CW Codes)',
+    title: 'Office Staff & College-Wide Operational Standards (OS & CW Codes)',
     text: `# Office Staff & College-Wide Operational Standards (OS & CW Codes)
 ## 1. Office Staff Service Standards (OS Codes)
 - **OS-1.1**: Official Transcript of Records (TOR) and Certification turnaround time capped at 3 working days upon clearance.
@@ -183,16 +188,17 @@ export const BaselinePage: React.FC<BaselinePageProps> = ({ onBack }) => {
         return;
       }
 
-      // Title: first "# " heading line, or filename if none
+      // Title: first "# " heading line (stripped of markdown markers), or filename if none
       let title = file.name;
       const lines = text.split('\n');
       for (const line of lines) {
         const trimmed = line.trim();
-        if (trimmed.startsWith('# ')) {
-          title = trimmed;
+        if (trimmed.startsWith('#')) {
+          title = cleanDocumentTitle(trimmed);
           break;
         }
       }
+      if (!title) title = file.name;
 
       const newDoc: BaselineDoc = {
         id: crypto.randomUUID(),
@@ -222,13 +228,13 @@ export const BaselinePage: React.FC<BaselinePageProps> = ({ onBack }) => {
       return;
     }
 
-    let title = pasteTitle.trim();
+    let title = cleanDocumentTitle(pasteTitle.trim());
     if (!title) {
       const lines = pasteText.split('\n');
       for (const line of lines) {
         const trimmed = line.trim();
-        if (trimmed.startsWith('# ')) {
-          title = trimmed;
+        if (trimmed.startsWith('#')) {
+          title = cleanDocumentTitle(trimmed);
           break;
         }
       }
@@ -382,7 +388,7 @@ export const BaselinePage: React.FC<BaselinePageProps> = ({ onBack }) => {
                 </div>
                 <div>
                   <h3 className="font-heading font-semibold text-sm text-stone-900">
-                    {docItem.title}
+                    {cleanDocumentTitle(docItem.title)}
                   </h3>
                   <div className="flex items-center gap-3 text-[11px] text-stone-600 mt-0.5">
                     <span>{docItem.sizeChars.toLocaleString()} characters</span>
@@ -423,7 +429,7 @@ export const BaselinePage: React.FC<BaselinePageProps> = ({ onBack }) => {
       <Modal
         isOpen={Boolean(viewingDoc)}
         onClose={() => setViewingDoc(null)}
-        title={viewingDoc?.title || 'Baseline Document'}
+        title={cleanDocumentTitle(viewingDoc?.title || 'Baseline Document')}
         maxWidth="max-w-3xl"
       >
         <div className="space-y-3">
@@ -449,12 +455,12 @@ export const BaselinePage: React.FC<BaselinePageProps> = ({ onBack }) => {
       <Modal
         isOpen={Boolean(deletingDocId)}
         onClose={() => setDeletingDocId(null)}
-        title="Delete Baseline Document"
+        title={`Delete Document: ${cleanDocumentTitle(documents.find((d) => d.id === deletingDocId)?.title || 'Baseline Document')}`}
       >
         <div className="space-y-4">
           <div className="flex items-center gap-3 text-red-700 text-sm">
             <AlertTriangle className="w-5 h-5 shrink-0" />
-            <span>Are you sure you want to delete this baseline document? The Audit Assistant will no longer reference its codes during process reviews.</span>
+            <span>Are you sure you want to delete "{cleanDocumentTitle(documents.find((d) => d.id === deletingDocId)?.title || 'this document')}"? The Audit Assistant will no longer reference its codes during process reviews.</span>
           </div>
 
           <div className="flex items-center justify-end gap-3 pt-3 border-t border-stone-100">
