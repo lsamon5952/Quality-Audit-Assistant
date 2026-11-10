@@ -1,0 +1,67 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // Admins document: user may only get their own document to check admin status; no client writes allowed
+    match /admins/{uid} {
+      allow get: if isSignedIn() && request.auth.uid == uid && isValidId(uid);
+      allow list, write: if false;
+    }
+
+    // College baseline settings: any signed-in user can read; only superadmin can write
+    match /settings/baseline {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // Risk reports: superadmin only
+    match /riskReports/{reportId} {
+      allow read, write: if isAdmin() && isValidId(reportId);
+    }
+
+    // User profile and subcollections: owner read/write; admin read-only
+    match /users/{userId} {
+      allow read: if (isOwner(userId) || isAdmin()) && isValidId(userId);
+      allow write: if isOwner(userId) && isValidId(userId);
+
+      match /reviews/{reviewId} {
+        allow read: if (isOwner(userId) || isAdmin()) && isValidId(reviewId);
+        allow write: if isOwner(userId) && isValidId(reviewId);
+      }
+
+      match /interactions/{interactionId} {
+        allow read: if (isOwner(userId) || isAdmin()) && isValidId(interactionId);
+        allow write: if isOwner(userId) && isValidId(interactionId);
+      }
+    }
+
+    // Collection-group queries for reviews and interactions (admin only)
+    match /{path=**}/reviews/{reviewId} {
+      allow read: if isAdmin();
+    }
+
+    match /{path=**}/interactions/{interactionId} {
+      allow read: if isAdmin();
+    }
+  }
+}

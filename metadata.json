@@ -1,0 +1,6 @@
+{
+  "name": "Quality Audit Assistant",
+  "description": "Total Quality Management (TQM) process review, SIPOC mapping, and FMEA risk analysis for UM Tagum College.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
